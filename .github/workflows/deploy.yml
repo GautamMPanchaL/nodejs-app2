@@ -1,0 +1,51 @@
+name: CI/CD for Node.js App
+
+on:
+  push:
+    branches:
+      - main  # Trigger on push to main branch
+  pull_request:
+    branches:
+      - main  # Trigger on pull request to main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3  # Checkout the repository code
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'  # Set the Node.js version to use (adjust if you need another version)
+
+    - name: Install dependencies
+      run: |
+        npm install  # Install the Node.js dependencies specified in package.json
+    - name: Deploy to EC2
+      env:
+        PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }} 
+        EC2_USER: ubuntu 
+        EC2_HOST: ${{ secrets.EC2_PUBLIC_IP }} 
+        EC2_DIR: /home/ubuntu/nodejs-app
+      run: |
+        # Set up SSH to connect to EC2
+        echo "$PRIVATE_KEY" > private_key.pem
+        chmod 600 private_key.pem  # Set appropriate permissions for the private key file
+
+        # SSH into EC2 and deploy the code
+        ssh -i private_key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST <<EOF
+          # Navigate to the app directory
+          cd $EC2_DIR
+          
+          # Pull the latest code from the main branch
+          git pull origin main  # Ensure your branch is correct
+
+          # Install dependencies if needed
+          npm install
+
+          # Restart the application using pm2 or another method
+          pm2 restart server.js || pm2 start server.js  # Ensure pm2 is installed or use an alternative method to restart
+        EOF
